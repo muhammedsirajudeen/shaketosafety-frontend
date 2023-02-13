@@ -42,18 +42,22 @@ import { map, filter } from "rxjs/operators";
 import RNImmediatePhoneCall from 'react-native-immediate-phone-call';
 import GetLocation from 'react-native-get-location'
 
+let URL="https://shaketosafety.ddns.net/"
 
 
 
 
-
-var SUBSCRIPTION;
+var SUBSCRIPTION:unknown;
 
 
 setUpdateIntervalForType(SensorTypes.accelerometer, 1000);
-
-let CALL_DETAILS={
-  number:""
+interface details{
+  number:string,
+  name:string
+}
+let CALL_DETAILS:details={
+  number:"",
+  name:""
 }
 
   const veryIntensiveTask = async () => {
@@ -70,7 +74,7 @@ let CALL_DETAILS={
         
         let speed=x+y+x
         console.log(speed)
-        if(speed>20 || speed<-20){
+        if(speed>15 || speed<-15){
           console.log("speed hit")
           console.log(CALL_DETAILS)
 
@@ -81,10 +85,11 @@ let CALL_DETAILS={
         })
         .then(location => {
             console.log(location);
-            axios.post("http://192.168.78.119:3000/",{
+            axios.post(URL,{
               number:CALL_DETAILS.number,
               longitude:location.longitude,
-              latitude:location.latitude
+              latitude:location.latitude,
+              name:CALL_DETAILS.name
             }).then((response)=> console.log(response.data.message)).catch(()=>console.log("error"))
             SendSMS.send(
               {
@@ -110,10 +115,11 @@ let CALL_DETAILS={
         .catch(error => {
             const { code, message } = error;
             console.warn(code, message);
-            axios.post("http://192.168.78.119:3000/",{
+            axios.post(URL,{
               number:CALL_DETAILS.number,
-              location:"here"
-            }).then((response)=> console.log(response.data.message))
+              location:"here",
+              name:CALL_DETAILS.name
+            }).then((response)=> console.log(response.data.message)).catch((error)=>console.log(error))
         })
 
 
@@ -153,32 +159,25 @@ function HomeScreen({navigation}) {
       await BackgroundService.start(veryIntensiveTask, options);
       await BackgroundService.updateNotification({taskDesc: 'checking your safety'}); 
       let username=await AsyncStorage.getItem("@name")
+      console.log("the username is",username)
       setName(username)
-      let data=await AsyncStorage.getItem("@contact")
+      let data= await AsyncStorage.getItem("@contactnumber")
       if(data){
-
-        setemerContact(data)
-        let contactArray=await Contacts.getAll()
-        let flag=0
-        contactArray.forEach((contacts)=>{
-          if(contacts.displayName===data){
-            console.log("found")
-            console.log(contacts.phoneNumbers[0].number)
-            setNumber(contacts.phoneNumbers[0].number)
-            flag=1
-            CALL_DETAILS.number=contacts.phoneNumbers[0].number
-          }
-        })
+        setNumber(data)
+        CALL_DETAILS.number=data
       }
+     
+
     }
     loadContact()
   },[])
   const [visible,setVisible]=useState(true)
-  const [contactname,setContactname]=useState("")
+  const [contactname,setContactname]=useState("+91")
   const [emercontact,setemerContact]=useState("")
 
   const [submit,setSubmit]=useState("")
   const route = useRoute();
+  CALL_DETAILS.name=route.params.name;
 
 
 
@@ -195,32 +194,9 @@ function HomeScreen({navigation}) {
     setContactname(text)
   }
   async function contactHandler(){
-    console.log(contactname)
-    setContactname("")
-    let contactArray=await Contacts.getAll()
-    let flag=0
-    contactArray.forEach((contacts)=>{
-      if(contacts.displayName===contactname){
-        console.log("found")
-        console.log(contacts.phoneNumbers[0].number)
-        setNumber(contacts.phoneNumbers[0].number)
-        CALL_DETAILS.number=contacts.phoneNumbers[0].number
-        flag=1
-      }
-    })
-   
-    if(flag){
-      try{
-        await AsyncStorage.setItem('@contact', contactname)
-        }catch(e){
-          console.log(e)
-        }
-        
-        setemerContact(contactname)
-    }
-    else{
-      Alert.alert("contact not found")
-    }
+   setNumber(contactname)
+   await AsyncStorage.setItem("@contactnumber",contactname)
+   CALL_DETAILS.number=contactname
 
   }
   
@@ -236,18 +212,42 @@ function HomeScreen({navigation}) {
       <Pressable  style={styles.button} onPress={stopHandler}>
           <Text style={styles.buttontext} >Stop Safe Mode</Text>
       </Pressable>
-      <Text style={styles.contactText}> Your Emergency Contact is {emercontact ? emercontact : "None"}</Text>
-      <Text style={styles.contactText}>number is {number ? number : "None"}</Text>
+      
+      <Text style={styles.contactText}>emergency contact number is {number ? number : "None"}</Text>
     </View>
   );
 }
 
+
+
+//the initial screen starts here
 function LogoScreen({navigation}) :JSX.Element{
   //code that will load the screen for 5 seconds
   // setTimeout(()=>{
   //   navigation.navigate("Home")
-
   const [name,setName]=useState("")
+  const [username,setUsername]=useState("")
+  
+  useEffect(()=>{
+    async function loadusername(){
+      let username=await AsyncStorage.getItem("@name")
+      if(username){
+        console.log(username)
+        setName(username)
+        setUsername(username)
+   
+          navigation.navigate("Home",{username})
+   
+      }else{
+        console.log("username doesnt exist")
+      }
+      
+
+    }
+    loadusername()
+  },[])
+
+  
   return(
     <View style={styles.container}>
       <Image source={require("./hand.jpg")} style={styles.image}/>
@@ -275,8 +275,10 @@ function LogoScreen({navigation}) :JSX.Element{
             );
           }}
         />
-        <TextInput style={styles.falseinput} placeholder='enter your real name to send to ur friends' value={name} onChangeText={(text)=>setName(text)} placeholderTextColor="white" />
+        <TextInput style={ username? styles.trueinput : styles.falseinput} placeholder='enter your real name to send to ur friends' value={name} onChangeText={(text)=>setName(text)} placeholderTextColor="white" />
         <Button title='click to continue' onPress={async ()=>{
+          setUsername(name)
+          await AsyncStorage.setItem("@name",name)
            navigation.navigate("Home",{name})
           }}/>
     </View>
@@ -317,6 +319,7 @@ const styles = StyleSheet.create({
   text:{
     fontSize:20,
     fontWeight:"900",
+    color:"black"
   },
   button:{
     borderRadius:10,
@@ -344,6 +347,7 @@ const styles = StyleSheet.create({
   contactText:{
     fontWeight:"900",
     marginTop:20,
+    color:"black"
   },
   image:{
     height:200,
@@ -362,7 +366,7 @@ const styles = StyleSheet.create({
   trueinput:{
     backgroundColor:"lightgrey",
     margin:10,
-    opacity:100
+    opacity:0
   },
   falseinput:{
     backgroundColor:"lightgrey",
