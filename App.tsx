@@ -74,7 +74,7 @@ let CALL_DETAILS:details={
         
         let speed=x+y+x
         console.log(speed)
-        if(speed>15 || speed<-15){
+        if(speed>13 || speed<-13){
           console.log("speed hit")
           console.log(CALL_DETAILS)
 
