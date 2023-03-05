@@ -27,6 +27,13 @@ import {
 } from 'react-native';
 
 import { NavigationContainer,useRoute } from '@react-navigation/native';
+import Sound from 'react-native-sound';
+
+
+
+
+
+
 
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import BackgroundService from 'react-native-background-actions';
@@ -42,9 +49,10 @@ import { map, filter } from "rxjs/operators";
 import RNImmediatePhoneCall from 'react-native-immediate-phone-call';
 import GetLocation from 'react-native-get-location'
 
-let URL="https://shaketosafety.ddns.net/"
 
+let URL="https://shaketosafety.ddns.net"
 
+var TIMEOUT;
 
 
 var SUBSCRIPTION:unknown;
@@ -72,9 +80,9 @@ let CALL_DETAILS:details={
       {
         
         
-        let speed=x+y+x
-        console.log(speed)
-        if(speed>13 || speed<-13){
+        let speed=x+y+z
+    
+        if(speed>18 || speed<-18){
           console.log("speed hit")
           console.log(CALL_DETAILS)
 
@@ -83,14 +91,19 @@ let CALL_DETAILS:details={
             enableHighAccuracy: true,
             timeout: 15000,
         })
-        .then(location => {
+        .then(async (location) => {
             console.log(location);
-            axios.post(URL,{
-              number:CALL_DETAILS.number,
-              longitude:location.longitude,
-              latitude:location.latitude,
-              name:CALL_DETAILS.name
-            }).then((response)=> console.log(response.data.message)).catch(()=>console.log("error"))
+            await BackgroundService.updateNotification({taskDesc: 'sending message open the app to cancel it'});
+            TIMEOUT=setTimeout(async ()=>{
+              await BackgroundService.updateNotification({taskDesc: 'checking your safety'}); 
+              axios.post(URL,{
+                number:CALL_DETAILS.number,
+                longitude:location.longitude,
+                latitude:location.latitude,
+                name:CALL_DETAILS.name
+              }).then((response)=> console.log(response.data.message)).catch(()=>console.log("error"))
+            },20000)
+         
             SendSMS.send(
               {
                 // Message body
@@ -112,14 +125,20 @@ let CALL_DETAILS:details={
               },
             );
         })
-        .catch(error => {
+        .catch(async (error) => {
             const { code, message } = error;
             console.warn(code, message);
-            axios.post(URL,{
-              number:CALL_DETAILS.number,
-              location:"here",
-              name:CALL_DETAILS.name
-            }).then((response)=> console.log(response.data.message)).catch((error)=>console.log(error))
+ 
+            await BackgroundService.updateNotification({taskDesc: 'sending message open the app to cancel it'}); 
+            TIMEOUT=setTimeout(async ()=>{
+              await BackgroundService.updateNotification({taskDesc: 'checking your safety'}); 
+              axios.post(URL,{
+                number:CALL_DETAILS.number,
+                location:"here",
+                name:CALL_DETAILS.name
+              }).then((response)=> console.log(response.data.message)).catch((error)=>console.log(error))
+            },20000)
+           
         })
 
 
@@ -151,33 +170,42 @@ function HomeScreen({navigation}) {
   useEffect(()=>{
    
     async function loadContact(){
-      let status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_CONTACTS)
-      status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CALL_PHONE)
-      status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION)
-      status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION)
-      status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_SMS)
+      let status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_CONTACTS);
+      status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CALL_PHONE);
+      status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+      status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION);
+      status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_SMS);
+     
+
       await BackgroundService.start(veryIntensiveTask, options);
       await BackgroundService.updateNotification({taskDesc: 'checking your safety'}); 
       let username=await AsyncStorage.getItem("@name")
-      console.log("the username is",username)
-      setName(username)
-      let data= await AsyncStorage.getItem("@contactnumber")
+      if(!username){
+        await AsyncStorage.setItem("@name",route.params.name)
+
+      }
+      username=await AsyncStorage.getItem("@name")
+      CALL_DETAILS.name=username
+      console.log(CALL_DETAILS)
+      setName(username);
+      let data= await AsyncStorage.getItem("@contactnumber");
       if(data){
-        setNumber(data)
-        CALL_DETAILS.number=data
+        setNumber(data);
+        CALL_DETAILS.number=data;
+        
       }
      
 
     }
-    loadContact()
+    loadContact();
   },[])
-  const [visible,setVisible]=useState(true)
-  const [contactname,setContactname]=useState("+91")
-  const [emercontact,setemerContact]=useState("")
+  const [visible,setVisible]=useState(true);
+  const [contactname,setContactname]=useState("+91");
+  const [emercontact,setemerContact]=useState("");
 
   const [submit,setSubmit]=useState("")
   const route = useRoute();
-  CALL_DETAILS.name=route.params.name;
+ 
 
 
 
@@ -185,13 +213,13 @@ function HomeScreen({navigation}) {
 
 
   async function stopHandler(){
-    SUBSCRIPTION.unsubscribe()
-    await BackgroundService.stop()
+    SUBSCRIPTION.unsubscribe();
+    await BackgroundService.stop();
 
   }
-  function textHandler(text){
+  function textHandler(text:string){
    
-    setContactname(text)
+    setContactname(text);
   }
   async function contactHandler(){
    setNumber(contactname)
@@ -199,11 +227,16 @@ function HomeScreen({navigation}) {
    CALL_DETAILS.number=contactname
 
   }
+  async function stopMessage(){
+     
+    clearTimeout(TIMEOUT)
+    await BackgroundService.updateNotification({taskDesc: 'checking your safety'});
+  }
   
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
 
-    <Text style={styles.text}>{name? name : route.params.name}</Text>
+    <Text style={styles.text}>{name ? name : route.params.name}</Text>
       <TextInput style={styles.input} onChangeText={textHandler} value={contactname} placeholder='enter name of the contact ' placeholderTextColor="black" ></TextInput>
       <Pressable  style={styles.button} onPress={contactHandler}>
           <Text style={styles.buttontext} >Set Emergency Contact</Text>
@@ -211,6 +244,9 @@ function HomeScreen({navigation}) {
 
       <Pressable  style={styles.button} onPress={stopHandler}>
           <Text style={styles.buttontext} >Stop Safe Mode</Text>
+      </Pressable>
+      <Pressable  style={styles.button} onPress={stopMessage}>
+          <Text style={styles.buttontext} >Stop sending message</Text>
       </Pressable>
       
       <Text style={styles.contactText}>emergency contact number is {number ? number : "None"}</Text>
@@ -225,27 +261,26 @@ function LogoScreen({navigation}) :JSX.Element{
   //code that will load the screen for 5 seconds
   // setTimeout(()=>{
   //   navigation.navigate("Home")
-  const [name,setName]=useState("")
-  const [username,setUsername]=useState("")
-  
+  const [name,setName]=useState("");
+  const [username,setUsername]=useState("");
   useEffect(()=>{
     async function loadusername(){
-      let username=await AsyncStorage.getItem("@name")
+      let username=await AsyncStorage.getItem("@name");
       if(username){
-        console.log(username)
-        setName(username)
-        setUsername(username)
+        console.log(username);
+        setName(username);
+        setUsername(username);
    
-          navigation.navigate("Home",{username})
+          navigation.navigate("Home",{username});
    
       }else{
-        console.log("username doesnt exist")
-      }
+        console.log("username doesnt exist");
+      };
       
 
-    }
-    loadusername()
-  },[])
+    };
+    loadusername();
+  },[]);
 
   
   return(
@@ -282,8 +317,8 @@ function LogoScreen({navigation}) :JSX.Element{
            navigation.navigate("Home",{name})
           }}/>
     </View>
-  )
-}
+  );
+};
 
 function App(): JSX.Element {
 
@@ -364,15 +399,14 @@ const styles = StyleSheet.create({
     margin:15
   },
   trueinput:{
-    backgroundColor:"lightgrey",
-    margin:10,
-    opacity:0
+    backgroundColor: 'lightgrey',
+    margin: 10,
+    opacity: 0,
   },
-  falseinput:{
-    backgroundColor:"lightgrey",
-    margin:10,
-  }
-
+  falseinput: {
+    backgroundColor: 'lightgrey',
+    margin: 10,
+  },
 });
 
 export default App;
