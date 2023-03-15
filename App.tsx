@@ -82,7 +82,7 @@ let CALL_DETAILS:details={
         
         let speed=x+y+z
     
-        if(speed>18 || speed<-18){
+        if(speed>22 || speed<-22){
           console.log("speed hit")
           console.log(CALL_DETAILS)
 
@@ -177,8 +177,7 @@ function HomeScreen({navigation}) {
       status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_SMS);
      
 
-      await BackgroundService.start(veryIntensiveTask, options);
-      await BackgroundService.updateNotification({taskDesc: 'checking your safety'}); 
+
       let username=await AsyncStorage.getItem("@name")
       if(!username){
         await AsyncStorage.setItem("@name",route.params.name)
@@ -205,7 +204,7 @@ function HomeScreen({navigation}) {
 
   const [submit,setSubmit]=useState("")
   const route = useRoute();
- 
+  let clicked=false
 
 
 
@@ -215,6 +214,7 @@ function HomeScreen({navigation}) {
   async function stopHandler(){
     SUBSCRIPTION.unsubscribe();
     await BackgroundService.stop();
+    clicked=false
 
   }
   function textHandler(text:string){
@@ -227,10 +227,22 @@ function HomeScreen({navigation}) {
    CALL_DETAILS.number=contactname
 
   }
+  async function startHandler(){
+    if(clicked){
+      Alert.alert("background job running")
+      
+    }
+    else{
+    await BackgroundService.start(veryIntensiveTask, options);
+    await BackgroundService.updateNotification({taskDesc: 'checking your safety'}); 
+    clicked=true
+  }
+  }
   async function stopMessage(){
      
     clearTimeout(TIMEOUT)
     await BackgroundService.updateNotification({taskDesc: 'checking your safety'});
+    Alert.alert("message sending has stopped")
   }
   
   return (
@@ -241,7 +253,9 @@ function HomeScreen({navigation}) {
       <Pressable  style={styles.button} onPress={contactHandler}>
           <Text style={styles.buttontext} >Set Emergency Contact</Text>
       </Pressable>
-
+      <Pressable  style={styles.button} onPress={startHandler}>
+          <Text style={styles.buttontext} >Start Safe Mode</Text>
+      </Pressable>
       <Pressable  style={styles.button} onPress={stopHandler}>
           <Text style={styles.buttontext} >Stop Safe Mode</Text>
       </Pressable>
